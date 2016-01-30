@@ -33,6 +33,9 @@ HTML::ExtractContent::FTR - extract content using Full-Test-RSS rules
 
 use vars qw(%command_phase %phases);
 %command_phase = (
+    http_header => 'prepare',
+    user_agent => 'prepare', # I can imagine that
+    rewrite_url => 'prepare', # I can imagine that
     body => 'extract',
     author => 'extract',
     date => 'extract',
@@ -64,8 +67,9 @@ sub new {
             %rules = map { $_->{host} => $_ } @parsed;
         }
         $options{ rules } ||= \%rules;
+        
     };
-    
+
     bless \%options => $class
 }
 
@@ -282,17 +286,42 @@ sub compile_body {
     return $self->_compile_selector_fetch($program, $rule);
 }
 
-sub _compile_selector_fetch { # a no-op
+=head2 C<< ->_compile_selector_fetch >>
+
+The internal generator for compiling a rule that fetches an
+XPath selector and stores it as an attribute.
+
+=cut
+
+sub _compile_selector_fetch {
     my( $self, $program, $rule ) = @_;
     return sub {
         my($r, $tree, $info) = @_;
-        my @res = scrape undef, { value => $rule->{target} }, { tree => $tree };
+        warn "Scanning for '$rule->{target}'";
+        #my @res = scrape undef, { value => $rule->{target} }, { tree => $tree };
+        my @res = $tree->findnodes($rule->{target});
         if( @res ) {
-            $info->{ $rule->{command} } = [ map { $_->{value} } @res ];
+            # We append
+            if(! $info->{ $rule->{command} }) {
+                 $info->{ $rule->{command}} = HTML::TreeBuilder->new_from_content('<div>');
+            };
+            my $storage = $info->{ $rule->{command} }->guts;
+            for my $node (@res) {
+                $storage->push_content($node);
+                #$node->detach;
+            };
+        } else {
+            warn "No selector found for '$rule->{target}'";
         };
         return $tree
     }
 }
+
+=head2 C<< ->compile_if_page_contains >>
+
+A no-op currently
+
+=cut
 
 sub compile_if_page_contains {
     my( $self, $program, $rule ) = @_;
@@ -358,7 +387,6 @@ sub compile_native_ad_clue {
         return $tree
     }
 }
-
 
 sub compile_replace_string {
     my( $self, $program, $rule ) = @_;

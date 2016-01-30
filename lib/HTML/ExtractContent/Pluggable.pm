@@ -80,10 +80,22 @@ sub new {
     bless $info => $class
 }
 
-sub title { join "", @{ $_[0]->{title} || []} }
-sub body { join "", @{ $_[0]->{body} || [] } }
-sub author { join "", @{ $_[0]->{author} ||[]} }
-sub date { join "", @{ $_[0]->{date} ||[]} }
+sub tree_as_html {
+}
+
+sub tree_as_text {
+    my($self, $attr) = @_;
+    if( my $tree = $self->{$attr}) {
+        $tree->as_text
+    } else {
+        undef
+    }
+}
+
+sub title { $_[0]->tree_as_text('title') }
+sub body { $_[0]->tree_as_text('body') }
+sub author { $_[0]->tree_as_text('author') }
+sub date { $_[0]->tree_as_text('date') }
 sub as_text { $_[0]->body }
 
 1;
