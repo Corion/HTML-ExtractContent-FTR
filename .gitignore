@@ -1,0 +1,13 @@
+Makefile
+Makefile.old
+*.tar.gz
+*.bak
+pm_to_blib
+blib/
+HTML-ExtractContent-FTR-*
+HTML-ExtractContent-FTR-*/
+.releaserc
+cover_db
+MYMETA.*
+# these are a local copy of https://github.com/fivefilters/ftr-site-config
+rules/
