@@ -302,9 +302,9 @@ sub _compile_selector_fetch {
         if( @res ) {
             # We append
             if(! $info->{ $rule->{command} }) {
-                 $info->{ $rule->{command}} = HTML::TreeBuilder->new_from_content('<div>');
+                 $info->{ $rule->{command}} = HTML::Element->new('div');
             };
-            my $storage = $info->{ $rule->{command} }->guts;
+            my $storage = $info->{ $rule->{command} };
             for my $node (@res) {
                 $storage->push_content($node);
                 #$node->detach;
