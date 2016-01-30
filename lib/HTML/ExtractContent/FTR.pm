@@ -34,7 +34,6 @@ HTML::ExtractContent::FTR - extract content using Full-Test-RSS rules
 use vars qw(%command_phase %phases);
 %command_phase = (
     http_header => 'prepare',
-    user_agent => 'prepare', # I can imagine that
     rewrite_url => 'prepare', # I can imagine that
     body => 'extract',
     author => 'extract',
