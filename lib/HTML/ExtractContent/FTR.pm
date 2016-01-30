@@ -31,6 +31,23 @@ HTML::ExtractContent::FTR - extract content using Full-Test-RSS rules
 
 =cut
 
+use vars qw(%command_phase %phases);
+%command_phase = (
+    body => 'extract',
+    author => 'extract',
+    date => 'extract',
+    title => 'extract',
+    strip => 'restructure',
+);
+
+my $phase;
+%phases = (map { $_ => $phase++ } qw<
+    prepare
+    fetch
+    restructure
+    extract
+>);
+
 sub new {
     my( $class, %options ) = @_;
     
@@ -83,8 +100,12 @@ sub apply_rules {
     my $tree = $self->parse_html_string( $html );
     
     my $info = {};
-    for my $step (@{ $rule->{commands} }) {
-        $tree = $step->{compiled}->($rule, $tree, $info);
+    for my $phase (@{ $rule->{commands} }) {
+        for my $step (@{ $phase }) {
+            #$tree->dump;
+            #warn "$step->{command} $step->{target}\n";
+            $tree = $step->{compiled}->($rule, $tree, $info);
+        };
     };
     return HTML::ExtractContent::Info->new( $info );
 }
@@ -117,8 +138,13 @@ sub parse_rule {
         commands => [],
     };
     for my $line (@lines) {
-        my $cmd = $self->parse_line( $result, $line );
-        push @{ $result->{commands}}, $cmd if( $cmd );
+        if( my $cmd = $self->parse_line( $result, $line )) {
+            my $d = $cmd->{command};
+            my $p = $command_phase{ $d } || 'restructure';
+            my $phase = $phases{ $p };
+            $result->{commands}->[$phase] ||= [];
+            push @{ $result->{commands}->[$phase] }, $cmd if( $cmd );
+        }
     };
     $result
 }
@@ -280,11 +306,17 @@ sub compile_strip {
         if $sel =~ /^\[/;
     $sel = '//' . $sel
         if $sel =~ /^\*/;
-    my $xpath = selector_to_xpath( $sel);
+    my $xpath = $sel;
+    if( $sel !~ m!^/! ) {
+        $xpath = selector_to_xpath( $sel);
+    };
     return sub {
+        # Strip implicitly operates on the 'body' attribute
         my($r, $tree, $info) = @_;
         
+        #warn "removing $xpath";
         for my $node ($tree->findnodes($xpath)) {
+            #$node->dump;
             $node->delete
         }
         return $tree
