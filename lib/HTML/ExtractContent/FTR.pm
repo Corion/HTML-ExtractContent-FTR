@@ -3,6 +3,7 @@ use strict;
 use 5.016; # for fc
 use URI;
 use Carp qw(croak);
+use HTML::TreeBuilder 5 -weak;
 use HTML::TreeBuilder::XPath;
 use HTML::Selector::XPath 'selector_to_xpath';
 use App::scrape 'scrape';
@@ -10,7 +11,8 @@ use Data::Dumper;
 use HTML::ExtractContent::Pluggable;
 use File::Basename;
 
-use vars qw(%rules @rules);
+use vars qw(%rules @rules $VERSION);
+$VERSION = '0.01';
 
 =head1 NAME
 
@@ -86,14 +88,17 @@ sub extract {
     if( my $rule = $self->{rules}->{$match} ) {
         return $self->apply_rules( $rule, $html, $url, %options );
     } else {
-        warn "No host match found for '$host' in ". join "\n", sort keys %{ $self->{rules} };
+        warn "No host match found for '$host' in rules.";
     };
 }
 
 sub parse_html_string {
     my( $self, $html ) = @_;
-    my $tree = HTML::TreeBuilder::XPath->new;
+    $HTML::TreeBuilder::isHeadOrBodyElement{'time'} = 1;
+    #    for (qw(time figure figcaption header)); # eyouch 
+    my $tree = HTML::TreeBuilder::XPath->new(ignore_unknown => 1);
     $tree->parse( $html );
+    #$tree->dump;
     $tree->eof();
     $tree
 }
@@ -110,7 +115,8 @@ sub apply_rules {
             $tree = $step->{compiled}->($rule, $tree, $info);
         };
     };
-    return HTML::ExtractContent::Info->new( $info );
+    my $res = HTML::ExtractContent::Info->new( $info );
+    return $res
 }
 
 sub parse {
@@ -156,6 +162,7 @@ sub parse_line {
     my( $self, $rule, $line ) = @_;
     return unless $line =~ /\S/;
     return if $line =~ /^\s*#/;
+    return if $line =~ m!^\s*//!;
     $line =~ /^(\w+)(?:\s*\((.*?)\))?\s*:\s*(.*)$/
         or croak "Malformed line '$line'";
     my( $directive, $args, $value ) = (lc $1,$2,$3);
@@ -296,7 +303,7 @@ sub _compile_selector_fetch {
     my( $self, $program, $rule ) = @_;
     return sub {
         my($r, $tree, $info) = @_;
-        warn "Scanning for '$rule->{target}'";
+        #warn "Scanning for '$rule->{target}'";
         #my @res = scrape undef, { value => $rule->{target} }, { tree => $tree };
         my @res = $tree->findnodes($rule->{target});
         if( @res ) {
@@ -310,7 +317,7 @@ sub _compile_selector_fetch {
                 #$node->detach;
             };
         } else {
-            warn "No selector found for '$rule->{target}'";
+            warn "No node found for '$rule->{target}'";
         };
         return $tree
     }
