@@ -3,8 +3,8 @@ use strict;
 use 5.016; # for fc
 use URI;
 use Carp qw(croak);
-use HTML::TreeBuilder 5 -weak;
-use HTML::TreeBuilder::XPath;
+use HTML::TreeBuilder::LibXML;
+use HTML::HTML5::Parser;
 use HTML::Selector::XPath 'selector_to_xpath';
 use App::scrape 'scrape';
 use Data::Dumper;
@@ -74,6 +74,25 @@ sub new {
     bless \%options => $class
 }
 
+sub find_xpath {
+    my( $self, $html, %options ) = @_;
+    
+    my $substring = $options{substring};
+    $substring =~ quotemeta $substring;
+    
+    # brute-force traverse our tree and output the node path(s)
+    # where we find the text. Consider simplifying the path
+    # or turning it into a CSS(-like) selector by using @class
+    # or @id.
+    my $tree = $self->parse_html_string($html);
+    my @res;
+    for my $node ($tree->findnodes("//*[contains(text(),'$substring')]")) {
+        push @res, $node;
+    };
+    
+    @res
+}
+
 sub extract {
     my( $self, $html, %options ) = @_;
     my $url = $options{ url };
@@ -93,25 +112,29 @@ sub extract {
 }
 
 sub parse_html_string {
-    my( $self, $html ) = @_;
-    $HTML::TreeBuilder::isHeadOrBodyElement{'time'} = 1;
-    #    for (qw(time figure figcaption header)); # eyouch 
-    my $tree = HTML::TreeBuilder::XPath->new(ignore_unknown => 1);
-    $tree->parse( $html );
-    #$tree->dump;
-    $tree->eof();
-    $tree
+    my( $self, $html, $options ) = @_;
+    $options ||= { encoding => 1 };
+    
+    my $p = HTML::HTML5::Parser->new;
+    # We should somehow respect the encoding here...
+    use Encode 'encode';
+    $html = encode('UTF-8', $html); 
+    open my $fh, '<', \$html
+        or die "Couldn't read in-memory handle: $!";
+    my $tree = $p->parse_fh($fh, $options);
+    
+    return HTML::TreeBuilder::LibXML::Node->new( $tree->documentElement );
 }
 
 sub apply_rules {
     my( $self, $rule, $html, $url, %options ) = @_;
-    my $tree = $self->parse_html_string( $html );
+    my $tree = $self->parse_html_string( $html, { url => $url });
     
     my $info = {};
     for my $phase (@{ $rule->{commands} }) {
         for my $step (@{ $phase }) {
             #$tree->dump;
-            #warn "$step->{command} $step->{target}\n";
+            warn "$step->{command} $step->{target}\n";
             $tree = $step->{compiled}->($rule, $tree, $info);
         };
     };
@@ -549,6 +572,28 @@ test_url: http://www.heise.de/newsticker/meldung/Ueberwachungstechnik-Die-global
 RULE
 
 );
+
+package HTML::TreeBuilder::LibXML::Node;
+use vars '$AUTOLOAD';
+sub AUTOLOAD {
+    $AUTOLOAD =~ m/::(\w+)$/
+        or die "Invalid method '$AUTOLOAD' called";
+    my $method = $1;
+    use Data::Dumper;
+    warn Dumper $_[0];
+    my $cb = $_[0]->{node}->can( $method )
+        or die "Method '$method' not found in $_[0]";
+    my $delegate = sub {
+        my $self = shift @_;
+        unshift @_, $self->{node};
+        goto &$cb;
+    };
+    no strict 'refs';
+    *{"HTML::TreeBuilder::LibXML::Node\::$method"} = $delegate;
+    goto &$delegate;
+}
+
+
 
 =head1 SEE ALSO 
 
