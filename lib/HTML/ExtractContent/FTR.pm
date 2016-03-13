@@ -342,6 +342,10 @@ sub _compile_selector_fetch {
     my( $self, $program, $rule ) = @_;
     return sub {
         my($r, $tree, $info) = @_;
+        my $attr;
+        #if( $rule->{target} =~ s!\@(\w+)$!! ) {
+        #    $attr = $1;
+        #};
         warn "Scanning for '$rule->{target}'";
         #my @res = scrape undef, { value => $rule->{target} }, { tree => $tree };
         my @res = $tree->findnodes($rule->{target});
@@ -350,8 +354,15 @@ sub _compile_selector_fetch {
             if(! $info->{ $rule->{command} }) {
                  $info->{ $rule->{command}} = HTML::Element->new('div');
             };
+            
             my $storage = $info->{ $rule->{command} };
+            
+            # Copy the node
             for my $node (@res) {
+                # Attributes need special handling
+                $node = $node->getValue
+                    if $node->can('getValue');
+
                 $storage->push_content($node);
                 #$node->detach;
             };
