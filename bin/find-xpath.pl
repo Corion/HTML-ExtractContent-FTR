@@ -25,14 +25,13 @@ sub myNodePath {
     my @res;
     while( $node and $node->nodeName ne '#document') {
         my $el = $node->nodeName;
-        warn $el;
         if( my $class = $node->attr('class') ) {
             $el .= "[contains(\@class, '$class')]";
         };
         push @res, $el;
         $node = $node->parent;
     }
-    return join '/', reverse @res;
+    return join '/', '', reverse @res;
 }
 
 for my $node (@nodes) {
