@@ -3,8 +3,8 @@ use strict;
 use 5.016; # for fc
 use URI;
 use Carp qw(croak);
-use HTML::TreeBuilder::LibXML;
 use HTML::HTML5::Parser;
+use HTML::TreeBuilder::LibXML::Node;
 use HTML::Selector::XPath 'selector_to_xpath';
 use App::scrape 'scrape';
 use Data::Dumper;
@@ -71,6 +71,9 @@ sub new {
         
     };
     
+    # We should turn this module into a state machine that
+    # returns "Need URL" instead of going out and fetching things
+    # itself (or doing a callback).
     if( ! exists $options{ fetcher } ) {
         $options{ fetcher } = sub {
             my ($url) = @_;
@@ -96,12 +99,39 @@ sub find_xpath {
     # or @id.
     my $tree = $self->parse_html_string($html);
     my @res;
-    for my $node ($tree->findnodes("//*[contains(text(),'$substring')]")) {
+    for my $node ($self->findnodes($tree, "//*[contains(text(),'$substring')]")) {
         push @res, $node;
     };
     
     @res
 }
+
+sub findnodes {
+    my( $self, $tree, $xpath ) = @_;
+    
+    # Convert query to a query with html: namespace prefix
+    my $ns_prefix = 'html';
+    $xpath =~ s!(/\s*)(\w+)!$1$ns_prefix:$2!g;
+    #warn ">>$xpath";
+    
+    # And also (re)implement ->findnodes, because we want to
+    # pass in an XPath Query Context for the HTML namespace :-(
+    # The world could be so much nicer.
+    # See also https://rt.cpan.org/Public/Bug/Display.html?id=88041
+    # which discusses that what we're doing here is the currently
+    # acceptable workaround :-(
+    
+    my $xpc = XML::LibXML::XPathContext->new($tree->{node});
+    $xpc->registerNs($ns_prefix, 'http://www.w3.org/1999/xhtml');
+    
+    # Rebless them into HTML::TreeBuilder::LibXML::Node's
+    my $n = $xpc->findnodes($xpath);
+    my @nodes = map {
+        #warn $_;
+        HTML::TreeBuilder::LibXML::Node->new( $_ )
+    } $n->get_nodelist();
+    wantarray ? @nodes : \@nodes;
+};
 
 sub extract {
     my( $self, $html, %options ) = @_;
@@ -132,6 +162,9 @@ sub parse_html_string {
     open my $fh, '<', \$html
         or die "Couldn't read in-memory handle: $!";
     my $tree = $p->parse_fh($fh, $options);
+    # This puts all nodes into the HTML namespace
+    #   http://www.w3.org/1999/xhtml
+    # but we want non-namespaced elements :-((
     
     return HTML::TreeBuilder::LibXML::Node->new( $tree->documentElement );
 }
@@ -142,7 +175,7 @@ sub apply_rules {
 REPARSE:
     # This needs to happen only after the ->fetch stage...
     my $tree = $self->parse_html_string( $html, { url => $url } );
-    $tree->dump;
+    #$tree->dump;
     
     my $info = {};
     # How do we fetch-and-restart the program with
@@ -155,6 +188,9 @@ REPARSE:
             
             if( $info->{fetch} ) {
                 warn "Refetching as $info->{url}";
+                # No, this should be(come) a state machine
+                # Return state, wanted URL and explanatory message
+                # to the user here
                 if( my $fetcher = $self->{do_fetch}) {
                     $html = $fetcher->( $info->{url} );
                     warn "Restarting with [[$html]]";
@@ -311,7 +347,9 @@ sub compile_single_page_link {
         
         warn "Scanning for single page link in '$rule->{target}'";
         #my @res = scrape undef, { value => $rule->{target} }, { tree => $tree };
-        my @res = $tree->findnodes($rule->{target});
+  #my $xpc = XML::LibXML::XPathContext->new;
+  #$xpc->registerNs('html', 'http://www.w3.org/1999/xhtml');
+        my @res = $self->findnodes($tree, $rule->{target});
         warn Dumper @res;
         if( @res ) {
             warn Dumper $res[0];
@@ -374,7 +412,7 @@ sub _compile_selector_fetch {
         my($r, $tree, $info) = @_;
         #warn "Scanning for '$rule->{target}'";
         #my @res = scrape undef, { value => $rule->{target} }, { tree => $tree };
-        my @res = $tree->findnodes($rule->{target});
+        my @res = $self->findnodes($tree,$rule->{target});
         if( @res ) {
             # We append
             if(! $info->{ $rule->{command} }) {
@@ -426,7 +464,7 @@ sub compile_strip {
         my($r, $tree, $info) = @_;
         
         #warn "removing $xpath";
-        for my $node ($tree->findnodes($xpath)) {
+        for my $node ($self->findnodes($tree,$xpath)) {
             #$node->dump;
             $node->delete
         }
@@ -439,7 +477,7 @@ sub compile_strip_id_or_class {
     my $xpath = join " | ", selector_to_xpath( "#" . $rule->{target}), selector_to_xpath( "." . $rule->{target});
     return sub {
         my($r, $tree, $info) = @_;
-        for my $node ($tree->findnodes($xpath)) {
+        for my $node ($self->findnodes($tree,$xpath)) {
             $node->delete
         }
         return $tree
@@ -451,7 +489,7 @@ sub compile_strip_image_src {
     my $xpath = sprintf 'img[@src="%s"]', $rule->{target};
     return sub {
         my($r, $tree, $info) = @_;
-        for my $node ($tree->findnodes($xpath)) {
+        for my $node ($self->findnodes($tree,$xpath)) {
             $node->delete
         }
         return $tree
@@ -463,7 +501,7 @@ sub compile_native_ad_clue {
     my $xpath = $rule->{target};
     return sub {
         my($r, $tree, $info) = @_;
-        for my $node ($tree->findnodes($xpath)) {
+        for my $node ($self->findnodes($tree,$xpath)) {
             $node->delete
         }
         return $tree
@@ -493,8 +531,8 @@ sub compile_move_into {
     my $source_xpath = selector_to_xpath($source);
     return sub {
         my($r, $tree, $info) = @_;
-        for my $target ($tree->findnodes($target_xpath)) {
-            for my $node ($tree->findnodes($source_xpath)) {
+        for my $target ($self->findnodes($tree,$target_xpath)) {
+            for my $node ($self->findnodes($tree,$source_xpath)) {
                 my $new = $node->clone;
                 $node->delete;
                 $target->postinsert( $new );
