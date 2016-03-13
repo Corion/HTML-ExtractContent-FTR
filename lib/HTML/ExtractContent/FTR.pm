@@ -632,8 +632,8 @@ sub AUTOLOAD {
     $AUTOLOAD =~ m/::(\w+)$/
         or die "Invalid method '$AUTOLOAD' called";
     my $method = $1;
-    use Data::Dumper;
-    warn Dumper $_[0];
+    #use Data::Dumper;
+    #warn Dumper $_[0];
     my $cb = $_[0]->{node}->can( $method )
         or die "Method '$method' not found in $_[0]";
     my $delegate = sub {
