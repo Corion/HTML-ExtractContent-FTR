@@ -273,9 +273,27 @@ sub compile_find_string { # a no-op
     return ()
 }
 
-sub compile_single_page_link { # a no-op
+sub compile_single_page_link {
     my( $self, $program, $rule ) = @_;
-    return ()
+    #warn "Compiled link fetcher with $rule->{target}";
+    return sub {
+        my($r, $tree, $info) = @_;
+        
+        warn "Scanning for single page link in '$rule->{target}'";
+        #my @res = scrape undef, { value => $rule->{target} }, { tree => $tree };
+        my @res = $tree->findnodes($rule->{target});
+        warn Dumper @res;
+        if( @res ) {
+            warn Dumper $res[0];
+            my $target = $res[0]->{href};
+            $info->{url} = $target;
+            $info->{fetch} = 1;
+            warn "Found single page link to $info->{url}";
+            exit;
+        };
+        exit;
+        return $tree
+    }
 }
 
 sub compile_single_page_link_in_feed { # a no-op
