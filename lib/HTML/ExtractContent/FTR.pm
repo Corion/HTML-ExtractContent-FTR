@@ -68,6 +68,16 @@ sub new {
         $options{ rules } ||= \%rules;
         
     };
+    
+    if( ! exists $options{ fetcher } ) {
+        $options{ fetcher } = sub {
+            my ($url) = @_;
+            my $agent = LWP::UserAgent->new;
+            warn "Fetching <$url>";
+            my $res = $agent->get($url);
+            return $res->decoded_content
+        }
+    }
 
     bless \%options => $class
 }
