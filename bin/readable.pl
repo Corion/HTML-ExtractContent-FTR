@@ -6,15 +6,15 @@ use Getopt::Long;
 
 GetOptions(
     'html' => \my $output_html,
+    'rules:s' => \my $rules_folder,
 );
 
 my( $url ) = @ARGV;
 my $html = get $url;
-
-#warn $html;
+$rules_folder ||= './ftr-site-config';
 
 my $extractor = HTML::ExtractContent::FTR->new(
-    rules_folder => 'rules/',
+    rules_folder => $rules_folder,
 );
 my $info = $extractor->extract( $html, url => $url );
 
@@ -41,6 +41,9 @@ if( $output_html ) {
 </html>
 HTML
 } else {
+    #system 'chcp 65001';
+    no warnings;
+    binmode STDOUT, 'UTF-8';
     print $info->title, "\n";
     print join " - ", $info->date, $info->author, "\n";
     print $info->body, "\n";

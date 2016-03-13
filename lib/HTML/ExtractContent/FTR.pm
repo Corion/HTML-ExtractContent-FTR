@@ -3,14 +3,16 @@ use strict;
 use 5.016; # for fc
 use URI;
 use Carp qw(croak);
-use HTML::TreeBuilder::XPath;
+use HTML::TreeBuilder::LibXML;
+use HTML::HTML5::Parser;
 use HTML::Selector::XPath 'selector_to_xpath';
 use App::scrape 'scrape';
 use Data::Dumper;
 use HTML::ExtractContent::Pluggable;
 use File::Basename;
 
-use vars qw(%rules @rules);
+use vars qw(%rules @rules $VERSION);
+$VERSION = '0.01';
 
 =head1 NAME
 
@@ -82,6 +84,25 @@ sub new {
     bless \%options => $class
 }
 
+sub find_xpath {
+    my( $self, $html, %options ) = @_;
+    
+    my $substring = $options{substring};
+    $substring =~ quotemeta $substring;
+    
+    # brute-force traverse our tree and output the node path(s)
+    # where we find the text. Consider simplifying the path
+    # or turning it into a CSS(-like) selector by using @class
+    # or @id.
+    my $tree = $self->parse_html_string($html);
+    my @res;
+    for my $node ($tree->findnodes("//*[contains(text(),'$substring')]")) {
+        push @res, $node;
+    };
+    
+    @res
+}
+
 sub extract {
     my( $self, $html, %options ) = @_;
     my $url = $options{ url };
@@ -96,16 +117,23 @@ sub extract {
     if( my $rule = $self->{rules}->{$match} ) {
         return $self->apply_rules( $rule, $html, $url, %options );
     } else {
-        warn "No host match found for '$host' in ". join "\n", sort keys %{ $self->{rules} };
+        warn "No host match found for '$host' in rules.";
     };
 }
 
 sub parse_html_string {
-    my( $self, $html ) = @_;
-    my $tree = HTML::TreeBuilder::XPath->new;
-    $tree->parse( $html );
-    $tree->eof();
-    $tree
+    my( $self, $html, $options ) = @_;
+    $options ||= { encoding => 1 };
+    
+    my $p = HTML::HTML5::Parser->new;
+    # We should somehow respect the encoding here...
+    use Encode 'encode';
+    $html = encode('UTF-8', $html); 
+    open my $fh, '<', \$html
+        or die "Couldn't read in-memory handle: $!";
+    my $tree = $p->parse_fh($fh, $options);
+    
+    return HTML::TreeBuilder::LibXML::Node->new( $tree->documentElement );
 }
 
 sub apply_rules {
@@ -113,7 +141,7 @@ sub apply_rules {
     
 REPARSE:
     # This needs to happen only after the ->fetch stage...
-    my $tree = $self->parse_html_string( $html );
+    my $tree = $self->parse_html_string( $html, { url => $url } );
     $tree->dump;
     
     my $info = {};
@@ -122,7 +150,7 @@ REPARSE:
     for my $phase (@{ $rule->{commands} }) {
         for my $step (@{ $phase }) {
             #$tree->dump;
-            #warn "$step->{command} $step->{target}\n";
+            warn "$step->{command} $step->{target}\n";
             $tree = $step->{compiled}->($rule, $tree, $info);
             
             if( $info->{fetch} ) {
@@ -138,7 +166,8 @@ REPARSE:
             last if delete $info->{done};
         };
     };
-    return HTML::ExtractContent::Info->new( $info );
+    my $res = HTML::ExtractContent::Info->new( $info );
+    return $res
 }
 
 sub parse {
@@ -184,6 +213,7 @@ sub parse_line {
     my( $self, $rule, $line ) = @_;
     return unless $line =~ /\S/;
     return if $line =~ /^\s*#/;
+    return if $line =~ m!^\s*//!;
     $line =~ /^(\w+)(?:\s*\((.*?)\))?\s*:\s*(.*)$/
         or croak "Malformed line '$line'";
     my( $directive, $args, $value ) = (lc $1,$2,$3);
@@ -342,11 +372,7 @@ sub _compile_selector_fetch {
     my( $self, $program, $rule ) = @_;
     return sub {
         my($r, $tree, $info) = @_;
-        my $attr;
-        #if( $rule->{target} =~ s!\@(\w+)$!! ) {
-        #    $attr = $1;
-        #};
-        warn "Scanning for '$rule->{target}'";
+        #warn "Scanning for '$rule->{target}'";
         #my @res = scrape undef, { value => $rule->{target} }, { tree => $tree };
         my @res = $tree->findnodes($rule->{target});
         if( @res ) {
@@ -367,7 +393,7 @@ sub _compile_selector_fetch {
                 #$node->detach;
             };
         } else {
-            warn "No selector found for '$rule->{target}'";
+            warn "No node found for '$rule->{target}'";
         };
         return $tree
     }
@@ -599,6 +625,28 @@ test_url: http://www.heise.de/newsticker/meldung/Ueberwachungstechnik-Die-global
 RULE
 
 );
+
+package HTML::TreeBuilder::LibXML::Node;
+use vars '$AUTOLOAD';
+sub AUTOLOAD {
+    $AUTOLOAD =~ m/::(\w+)$/
+        or die "Invalid method '$AUTOLOAD' called";
+    my $method = $1;
+    use Data::Dumper;
+    warn Dumper $_[0];
+    my $cb = $_[0]->{node}->can( $method )
+        or die "Method '$method' not found in $_[0]";
+    my $delegate = sub {
+        my $self = shift @_;
+        unshift @_, $self->{node};
+        goto &$cb;
+    };
+    no strict 'refs';
+    *{"HTML::TreeBuilder::LibXML::Node\::$method"} = $delegate;
+    goto &$delegate;
+}
+
+
 
 =head1 SEE ALSO 
 
