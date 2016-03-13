@@ -405,6 +405,9 @@ sub compile_body {
 The internal generator for compiling a rule that fetches an
 XPath selector and stores it as an attribute.
 
+This should also take care that we only select the ancestor node
+if two nodes get selected and one is a descendant of the other.
+
 =cut
 
 sub _compile_selector_fetch {
@@ -412,7 +415,6 @@ sub _compile_selector_fetch {
     return sub {
         my($r, $tree, $info) = @_;
         #warn "Scanning for '$rule->{target}'";
-        #my @res = scrape undef, { value => $rule->{target} }, { tree => $tree };
         my @res = $self->findnodes($tree,$rule->{target});
         if( @res ) {
             # We append
