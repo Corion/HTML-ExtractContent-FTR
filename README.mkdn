@@ -1,0 +1,33 @@
+# NAME
+
+HTML::ExtractContent::FTR - extract content using Full-Test-RSS rules
+
+# SYNOPSIS
+
+    use HTML::ExtractContent::FTR;
+    use LWP::UserAgent;
+
+    my $agent = LWP::UserAgent->new;
+    my $res = $agent->get('http://www.example.com/');
+
+    my $extractor = HTML::ExtractContent::FTR->new;
+    my $info = $extractor->extract($res->decoded_content, url => $url);
+    print $info->title, "\n";
+    print $info->as_text, "\n";
+
+## `->_compile_selector_fetch`
+
+The internal generator for compiling a rule that fetches an
+XPath selector and stores it as an attribute.
+
+## `->compile_if_page_contains`
+
+A no-op currently
+
+# SEE ALSO 
+
+[http://help.fivefilters.org/customer/portal/articles/223153-site-patterns](http://help.fivefilters.org/customer/portal/articles/223153-site-patterns)
+
+[https://github.com/fivefilters/ftr-site-config](https://github.com/fivefilters/ftr-site-config)
+
+1;
