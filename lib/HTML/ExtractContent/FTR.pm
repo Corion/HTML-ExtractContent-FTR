@@ -37,17 +37,18 @@ use vars qw(%command_phase %phases);
 %command_phase = (
     http_header => 'prepare',
     rewrite_url => 'prepare', # I can imagine that
-    body => 'extract',
-    author => 'extract',
-    date => 'extract',
-    title => 'extract',
+    author => 'extract_metadata',
+    date => 'extract_metadata',
+    title => 'extract_metadata',
     strip => 'restructure',
+    body => 'extract',
 );
 
 my $phase;
 %phases = (map { $_ => $phase++ } qw<
     prepare
     fetch
+    extract_metadata
     restructure
     extract
 >);
