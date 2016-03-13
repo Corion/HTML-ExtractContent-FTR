@@ -646,7 +646,9 @@ sub AUTOLOAD {
     goto &$delegate;
 }
 
-
+sub dump {
+    print $_[0]->toString;
+}
 
 =head1 SEE ALSO 
 
