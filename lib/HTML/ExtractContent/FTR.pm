@@ -110,14 +110,32 @@ sub parse_html_string {
 
 sub apply_rules {
     my( $self, $rule, $html, $url, %options ) = @_;
+    
+REPARSE:
+    # This needs to happen only after the ->fetch stage...
     my $tree = $self->parse_html_string( $html );
+    $tree->dump;
     
     my $info = {};
+    # How do we fetch-and-restart the program with
+    # single_page_link?
     for my $phase (@{ $rule->{commands} }) {
         for my $step (@{ $phase }) {
             #$tree->dump;
             #warn "$step->{command} $step->{target}\n";
             $tree = $step->{compiled}->($rule, $tree, $info);
+            
+            if( $info->{fetch} ) {
+                warn "Refetching as $info->{url}";
+                if( my $fetcher = $self->{do_fetch}) {
+                    $html = $fetcher->( $info->{url} );
+                    warn "Restarting with [[$html]]";
+                    goto REPARSE;
+                } else {
+                    return $info
+                };
+            };
+            last if delete $info->{done};
         };
     };
     return HTML::ExtractContent::Info->new( $info );
