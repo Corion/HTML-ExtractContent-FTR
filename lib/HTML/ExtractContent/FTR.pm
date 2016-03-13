@@ -517,8 +517,9 @@ sub compile_replace_string {
         # serialize to text
         my $text = $tree->as_HTML;
         # do string replacement
-        $text =~ s!$rule->{args}!$rule->{target}!;
+        $text =~ s!$rule->{args}!$rule->{target}!g;
         # parse to HTML::TreeBuilder again
+        
         return $self->parse_html_string( $text );
     }
 }
