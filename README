@@ -20,6 +20,9 @@ SYNOPSIS
     The internal generator for compiling a rule that fetches an XPath
     selector and stores it as an attribute.
 
+    This routine should also take care that we only select the ancestor
+    node if two nodes get selected and one is a descendant of the other.
+
  ->compile_if_page_contains
 
     A no-op currently
