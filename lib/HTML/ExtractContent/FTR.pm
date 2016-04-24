@@ -166,6 +166,7 @@ sub parse_html_string {
     # This puts all nodes into the HTML namespace
     #   http://www.w3.org/1999/xhtml
     # but we want non-namespaced elements :-((
+    # Maybe rebuilding the tree is an approach here?!
     
     return HTML::TreeBuilder::LibXML::Node->new( $tree->documentElement );
 }
@@ -351,16 +352,16 @@ sub compile_single_page_link {
   #my $xpc = XML::LibXML::XPathContext->new;
   #$xpc->registerNs('html', 'http://www.w3.org/1999/xhtml');
         my @res = $self->findnodes($tree, $rule->{target});
-        warn Dumper @res;
+        
+        warn Dumper \@res;
         if( @res ) {
             warn Dumper $res[0];
             my $target = $res[0]->{href};
             $info->{url} = $target;
             $info->{fetch} = 1;
             warn "Found single page link to $info->{url}";
-            exit;
+            # We should switch to a Promises/Future based fetching approach here
         };
-        exit;
         return $tree
     }
 }
@@ -400,12 +401,31 @@ sub compile_body {
     return $self->_compile_selector_fetch($program, $rule);
 }
 
+sub unique_nodes {
+    # Returns the forest containing $new_node and @nodes,
+    # with subtrees merged. To prevent quadratical performance in every
+    # step, we assume linear building of the set by adding one element after
+    # another. This still means quadratical performance overall, but at least
+    # adding one element is linear in the number of already stored elements.
+    
+    # Simply keep track of all the XPath ->nodePath()s for each node
+    # and do a direct string compare. Prestochangodone. (at least for
+    # those implementations where the XPath expression is canonical)
+    my( $self, $new_node, @nodes ) = @_;
+    my @new_ancestors = $new_node->ancestors;
+    grep {
+        my( $node ) = $_;
+        my @ancestors = $node->ancestors;
+        grep { $_->isSameNode( $new_node ) } @ancestors;
+    } @nodes;
+}
+
 =head2 C<< ->_compile_selector_fetch >>
 
 The internal generator for compiling a rule that fetches an
 XPath selector and stores it as an attribute.
 
-This should also take care that we only select the ancestor node
+This routine should also take care that we only select the ancestor node
 if two nodes get selected and one is a descendant of the other.
 
 =cut
@@ -419,7 +439,8 @@ sub _compile_selector_fetch {
         if( @res ) {
             # We append
             if(! $info->{ $rule->{command} }) {
-                 $info->{ $rule->{command}} = HTML::Element->new('div');
+                 #$info->{ $rule->{command}} = HTML::Element->new('div');
+                 $info->{ $rule->{command}} = [];
             };
             
             my $storage = $info->{ $rule->{command} };
@@ -430,7 +451,15 @@ sub _compile_selector_fetch {
                 $node = $node->getValue
                     if $node->can('getValue');
 
-                $storage->push_content($node);
+                if( ref $node) {
+                    # Check whether this node is already contained in $storage
+                    # Check whether nodes in $storage are already contained in
+                    # this node. Hello quadratic performance.
+                    @$storage = $self->unique_nodes($node, @$storage);
+                } else {
+                    push @$storage, $node;
+                };
+                
                 #$node->detach;
             };
         } else {

@@ -83,7 +83,10 @@ sub new {
 sub tree_as_text {
     my($self, $attr) = @_;
     if( my $tree = $self->{$attr}) {
-        $tree->as_text
+        my $res = HTML::Element->new('div');
+        $res->push_content( @$tree );
+        $res->as_text
+        #$tree->as_text
     } else {
         undef
     }
