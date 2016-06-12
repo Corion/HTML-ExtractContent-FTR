@@ -3,8 +3,8 @@ use strict;
 use 5.016; # for fc
 use URI;
 use Carp qw(croak);
-use HTML::TreeBuilder::LibXML;
 use HTML::HTML5::Parser;
+use HTML::TreeBuilder::LibXML::Node;
 use HTML::Selector::XPath 'selector_to_xpath';
 use Data::Dumper;
 use HTML::ExtractContent::Pluggable;
@@ -38,16 +38,18 @@ use vars qw(%command_phase %phases);
     rewrite_url => 'prepare', # I can imagine that
     fetch => 'fetch',
     body => 'extract',
-    author => 'extract',
-    date => 'extract',
-    title => 'extract',
+    author => 'extract_metadata',
+    date => 'extract_metadata',
+    title => 'extract_metadata',
     strip => 'restructure',
+    body => 'extract',
 );
 
 my $phase;
 %phases = (map { $_ => $phase++ } qw<
     prepare
     fetch
+    extract_metadata
     restructure
     extract
 >);
@@ -70,6 +72,19 @@ sub new {
         $options{ rules } ||= \%rules;
         
     };
+    
+    # We should turn this module into a state machine that
+    # returns "Need URL" instead of going out and fetching things
+    # itself (or doing a callback).
+    if( ! exists $options{ fetcher } ) {
+        $options{ fetcher } = sub {
+            my ($url) = @_;
+            my $agent = LWP::UserAgent->new;
+            warn "Fetching <$url>";
+            my $res = $agent->get($url);
+            return $res->decoded_content
+        }
+    }
 
     bless \%options => $class
 }
@@ -86,12 +101,39 @@ sub find_xpath {
     # or @id.
     my $tree = $self->parse_html_string($html);
     my @res;
-    for my $node ($tree->findnodes("//*[contains(text(),'$substring')]")) {
+    for my $node ($self->findnodes($tree, "//*[contains(text(),'$substring')]")) {
         push @res, $node;
     };
     
     @res
 }
+
+sub findnodes {
+    my( $self, $tree, $xpath ) = @_;
+    
+    # Convert query to a query with html: namespace prefix
+    my $ns_prefix = 'html';
+    $xpath =~ s!(/\s*)(\w+)!$1$ns_prefix:$2!g;
+    #warn ">>$xpath";
+    
+    # And also (re)implement ->findnodes, because we want to
+    # pass in an XPath Query Context for the HTML namespace :-(
+    # The world could be so much nicer.
+    # See also https://rt.cpan.org/Public/Bug/Display.html?id=88041
+    # which discusses that what we're doing here is the currently
+    # acceptable workaround :-(
+    
+    my $xpc = XML::LibXML::XPathContext->new($tree->{node});
+    $xpc->registerNs($ns_prefix, 'http://www.w3.org/1999/xhtml');
+    
+    # Rebless them into HTML::TreeBuilder::LibXML::Node's
+    my $n = $xpc->findnodes($xpath);
+    my @nodes = map {
+        #warn $_;
+        HTML::TreeBuilder::LibXML::Node->new( $_ )
+    } $n->get_nodelist();
+    wantarray ? @nodes : \@nodes;
+};
 
 sub extract {
     my( $self, $html, %options ) = @_;
@@ -122,20 +164,44 @@ sub parse_html_string {
     open my $fh, '<', \$html
         or die "Couldn't read in-memory handle: $!";
     my $tree = $p->parse_fh($fh, $options);
+    # This puts all nodes into the HTML namespace
+    #   http://www.w3.org/1999/xhtml
+    # but we want non-namespaced elements :-((
     
     return HTML::TreeBuilder::LibXML::Node->new( $tree->documentElement );
 }
 
 sub apply_rules {
     my( $self, $rule, $html, $url, %options ) = @_;
-    my $tree = $self->parse_html_string( $html, { url => $url });
+    
+REPARSE:
+    # This needs to happen only after the ->fetch stage...
+    my $tree = $self->parse_html_string( $html, { url => $url } );
+    #$tree->dump;
     
     my $info = {};
+    # How do we fetch-and-restart the program with
+    # single_page_link?
     for my $phase (@{ $rule->{commands} }) {
         for my $step (@{ $phase }) {
             #$tree->dump;
             warn "$step->{command} $step->{target}\n";
             $tree = $step->{compiled}->($rule, $tree, $info);
+            
+            if( $info->{fetch} ) {
+                warn "Refetching as $info->{url}";
+                # No, this should be(come) a state machine
+                # Return state, wanted URL and explanatory message
+                # to the user here
+                if( my $fetcher = $self->{do_fetch}) {
+                    $html = $fetcher->( $info->{url} );
+                    warn "Restarting with [[$html]]";
+                    goto REPARSE;
+                } else {
+                    return $info
+                };
+            };
+            last if delete $info->{done};
         };
     };
     my $res = HTML::ExtractContent::Info->new( $info );
@@ -275,9 +341,29 @@ sub compile_find_string { # a no-op
     return ()
 }
 
-sub compile_single_page_link { # a no-op
+sub compile_single_page_link {
     my( $self, $program, $rule ) = @_;
-    return ()
+    #warn "Compiled link fetcher with $rule->{target}";
+    return sub {
+        my($r, $tree, $info) = @_;
+        
+        warn "Scanning for single page link in '$rule->{target}'";
+        #my @res = scrape undef, { value => $rule->{target} }, { tree => $tree };
+  #my $xpc = XML::LibXML::XPathContext->new;
+  #$xpc->registerNs('html', 'http://www.w3.org/1999/xhtml');
+        my @res = $self->findnodes($tree, $rule->{target});
+        warn Dumper @res;
+        if( @res ) {
+            warn Dumper $res[0];
+            my $target = $res[0]->{href};
+            $info->{url} = $target;
+            $info->{fetch} = 1;
+            warn "Found single page link to $info->{url}";
+            exit;
+        };
+        exit;
+        return $tree
+    }
 }
 
 sub compile_single_page_link_in_feed { # a no-op
@@ -320,6 +406,9 @@ sub compile_body {
 The internal generator for compiling a rule that fetches an
 XPath selector and stores it as an attribute.
 
+This should also take care that we only select the ancestor node
+if two nodes get selected and one is a descendant of the other.
+
 =cut
 
 sub _compile_selector_fetch {
@@ -327,14 +416,21 @@ sub _compile_selector_fetch {
     return sub {
         my($r, $tree, $info) = @_;
         #warn "Scanning for '$rule->{target}'";
-        my @res = $tree->findnodes($rule->{target});
+        my @res = $self->findnodes($tree,$rule->{target});
         if( @res ) {
             # We append
             if(! $info->{ $rule->{command} }) {
                  $info->{ $rule->{command}} = HTML::Element->new('div');
             };
+            
             my $storage = $info->{ $rule->{command} };
+            
+            # Copy the node
             for my $node (@res) {
+                # Attributes need special handling
+                $node = $node->getValue
+                    if $node->can('getValue');
+
                 $storage->push_content($node);
                 #$node->detach;
             };
@@ -379,7 +475,7 @@ sub compile_strip {
         my($r, $tree, $info) = @_;
         
         #warn "removing $xpath";
-        for my $node ($tree->findnodes($xpath)) {
+        for my $node ($self->findnodes($tree,$xpath)) {
             #$node->dump;
             $node->delete
         }
@@ -392,7 +488,7 @@ sub compile_strip_id_or_class {
     my $xpath = join " | ", selector_to_xpath( "#" . $rule->{target}), selector_to_xpath( "." . $rule->{target});
     return sub {
         my($r, $tree, $info) = @_;
-        for my $node ($tree->findnodes($xpath)) {
+        for my $node ($self->findnodes($tree,$xpath)) {
             $node->delete
         }
         return $tree
@@ -404,7 +500,7 @@ sub compile_strip_image_src {
     my $xpath = sprintf 'img[@src="%s"]', $rule->{target};
     return sub {
         my($r, $tree, $info) = @_;
-        for my $node ($tree->findnodes($xpath)) {
+        for my $node ($self->findnodes($tree,$xpath)) {
             $node->delete
         }
         return $tree
@@ -416,7 +512,7 @@ sub compile_native_ad_clue {
     my $xpath = $rule->{target};
     return sub {
         my($r, $tree, $info) = @_;
-        for my $node ($tree->findnodes($xpath)) {
+        for my $node ($self->findnodes($tree,$xpath)) {
             $node->delete
         }
         return $tree
@@ -432,8 +528,9 @@ sub compile_replace_string {
         # serialize to text
         my $text = $tree->as_HTML;
         # do string replacement
-        $text =~ s!$rule->{args}!$rule->{target}!;
+        $text =~ s!$rule->{args}!$rule->{target}!g;
         # parse to HTML::TreeBuilder again
+        
         return $self->parse_html_string( $text );
     }
 }
@@ -446,8 +543,8 @@ sub compile_move_into {
     my $source_xpath = selector_to_xpath($source);
     return sub {
         my($r, $tree, $info) = @_;
-        for my $target ($tree->findnodes($target_xpath)) {
-            for my $node ($tree->findnodes($source_xpath)) {
+        for my $target ($self->findnodes($tree,$target_xpath)) {
+            for my $node ($self->findnodes($tree,$source_xpath)) {
                 my $new = $node->clone;
                 $node->delete;
                 $target->postinsert( $new );
@@ -585,8 +682,8 @@ sub AUTOLOAD {
     $AUTOLOAD =~ m/::(\w+)$/
         or die "Invalid method '$AUTOLOAD' called";
     my $method = $1;
-    use Data::Dumper;
-    warn Dumper $_[0];
+    #use Data::Dumper;
+    #warn Dumper $_[0];
     my $cb = $_[0]->{node}->can( $method )
         or die "Method '$method' not found in $_[0]";
     my $delegate = sub {
@@ -599,7 +696,9 @@ sub AUTOLOAD {
     goto &$delegate;
 }
 
-
+sub dump {
+    print $_[0]->toString;
+}
 
 =head1 SEE ALSO 
 

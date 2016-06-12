@@ -11,3 +11,4 @@ cover_db
 MYMETA.*
 # these are a local copy of https://github.com/fivefilters/ftr-site-config
 rules/
+ftr-site-config/

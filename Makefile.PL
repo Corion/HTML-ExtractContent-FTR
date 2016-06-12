@@ -37,8 +37,10 @@ WriteMakefile1(
         'Exporter' => 5, # for use Exporter 'import'
         
         'App::scrape' => 0,
-        'HTML::TreeBuilder' => 5, # we'll need more for newer tags
-        'HTML::TreeBuilder::XPath' => 0,
+        #'HTML::TreeBuilder' => 5, # we'll need more for newer tags
+        #'HTML::TreeBuilder::XPath' => 0,  # This is the API we want
+        'HTML::TreeBuilder::LibXML' => 0, # This provides the API for LibXML
+        'HTML::HTML5::Parser' => 0, # This is what we actually use
 
         },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
