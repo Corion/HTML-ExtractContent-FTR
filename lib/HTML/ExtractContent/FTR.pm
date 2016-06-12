@@ -347,7 +347,8 @@ sub _compile_selector_fetch {
 
 =head2 C<< ->compile_if_page_contains >>
 
-A no-op currently
+A no-op currently, until I figure out how to
+structure conditional statements
 
 =cut
 
@@ -355,6 +356,12 @@ sub compile_if_page_contains {
     my( $self, $program, $rule ) = @_;
     return ()
 }
+
+=head2 C<< ->compile_strip >>
+
+Strip all elements from the page that match a selector
+
+=cut
 
 sub compile_strip {
     my( $self, $program, $rule ) = @_;
