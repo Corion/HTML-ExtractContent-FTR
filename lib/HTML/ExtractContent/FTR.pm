@@ -15,7 +15,7 @@ $VERSION = '0.01';
 
 =head1 NAME
 
-HTML::ExtractContent::FTR - extract content using Full-Test-RSS rules
+HTML::ExtractContent::FTR - extract content using Full-Text-RSS rules
 
 =head1 SYNOPSIS
 
@@ -36,6 +36,7 @@ use vars qw(%command_phase %phases);
 %command_phase = (
     http_header => 'prepare',
     rewrite_url => 'prepare', # I can imagine that
+    fetch => 'fetch',
     body => 'extract',
     author => 'extract',
     date => 'extract',
