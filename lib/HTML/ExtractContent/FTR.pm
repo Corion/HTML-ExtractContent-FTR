@@ -6,7 +6,6 @@ use Carp qw(croak);
 use HTML::TreeBuilder::LibXML;
 use HTML::HTML5::Parser;
 use HTML::Selector::XPath 'selector_to_xpath';
-use App::scrape 'scrape';
 use Data::Dumper;
 use HTML::ExtractContent::Pluggable;
 use File::Basename;
