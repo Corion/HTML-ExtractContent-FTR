@@ -326,7 +326,6 @@ sub _compile_selector_fetch {
     return sub {
         my($r, $tree, $info) = @_;
         #warn "Scanning for '$rule->{target}'";
-        #my @res = scrape undef, { value => $rule->{target} }, { tree => $tree };
         my @res = $tree->findnodes($rule->{target});
         if( @res ) {
             # We append
