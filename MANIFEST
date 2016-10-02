@@ -1,0 +1,20 @@
+.gitignore
+bin/find-xpath.pl
+bin/readable.pl
+Changes
+lib/HTML/ExtractContent/ExtractMain.pm
+lib/HTML/ExtractContent/FTR.pm
+lib/HTML/ExtractContent/Guess.pm
+lib/HTML/ExtractContent/Pluggable.pm
+Makefile.PL
+MANIFEST			This list of files
+MANIFEST.SKIP
+README
+README.mkdn
+xt/99-changes.t
+xt/99-compile.t
+xt/99-manifest.t
+xt/99-pod.t
+xt/99-todo.t
+xt/99-unix-text.t
+xt/99-versions.t

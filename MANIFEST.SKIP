@@ -14,6 +14,7 @@ Makefile$
 ^jar/
 ^cpan/
 ^MYMETA
+^ftr-site-config/
 ^.releaserc
-^Filter-signatures-.*/
-^Filter-signatures-.*.tar.gz$
+^HTML-ExtractContent-FTR-.*/
+^HTML-ExtractContent-FTR-.*.tar.gz$
