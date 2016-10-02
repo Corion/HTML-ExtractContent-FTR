@@ -17,7 +17,7 @@ $VERSION = '0.01';
 
 =head1 NAME
 
-HTML::ExtractContent::FTR - extract content using Full-Test-RSS rules
+HTML::ExtractContent::FTR - extract content using Full-Text-RSS rules
 
 =head1 SYNOPSIS
 
@@ -38,6 +38,8 @@ use vars qw(%command_phase %phases);
 %command_phase = (
     http_header => 'prepare',
     rewrite_url => 'prepare', # I can imagine that
+    fetch => 'fetch',
+    body => 'extract',
     author => 'extract_metadata',
     date => 'extract_metadata',
     title => 'extract_metadata',
@@ -482,7 +484,8 @@ sub _compile_selector_fetch {
 
 =head2 C<< ->compile_if_page_contains >>
 
-A no-op currently
+A no-op currently, until I figure out how to
+structure conditional statements
 
 =cut
 
@@ -490,6 +493,12 @@ sub compile_if_page_contains {
     my( $self, $program, $rule ) = @_;
     return ()
 }
+
+=head2 C<< ->compile_strip >>
+
+Strip all elements from the page that match a selector
+
+=cut
 
 sub compile_strip {
     my( $self, $program, $rule ) = @_;
