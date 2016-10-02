@@ -2,6 +2,9 @@ package HTML::ExtractContent::Pluggable;
 use strict;
 use Carp qw(croak);
 
+use vars '$VERSION';
+$VERSION = '0.01';
+
 =head1 NAME
 
 HTML::ExtractContent::Pluggable - cascade of content extractors

@@ -4,9 +4,10 @@ use 5.016; # for fc
 use URI;
 use Carp qw(croak);
 use HTML::HTML5::Parser;
+# use HTML::Gumbo (which doesn't complete its test suite on Win32/Strawberry)
+# or maybe Mojo::DOM
 use HTML::TreeBuilder::LibXML::Node;
 use HTML::Selector::XPath 'selector_to_xpath';
-use App::scrape 'scrape';
 use Data::Dumper;
 use HTML::ExtractContent::Pluggable;
 use File::Basename;
@@ -57,6 +58,8 @@ sub new {
     my( $class, %options ) = @_;
     
     # If needed, we'll use the packaged rules
+    # XXX do we really want to use packaged rules or shouldn't we
+    #     make the user(s) download them?!
     if( ! exists $options{ rules } ) {
         if( exists $options{ rules_folder } ) {
             opendir my $rules,  $options{ rules_folder }
@@ -348,7 +351,6 @@ sub compile_single_page_link {
         my($r, $tree, $info) = @_;
         
         warn "Scanning for single page link in '$rule->{target}'";
-        #my @res = scrape undef, { value => $rule->{target} }, { tree => $tree };
   #my $xpc = XML::LibXML::XPathContext->new;
   #$xpc->registerNs('html', 'http://www.w3.org/1999/xhtml');
         my @res = $self->findnodes($tree, $rule->{target});

@@ -4,6 +4,9 @@ use HTML::ExtractContent;
 use HTML::HeadParser;
 use HTML::ExtractContent::Info;
 
+use vars '$VERSION';
+$VERSION = '0.01';
+
 =head1 NAME
 
 HTML::ExtractContent::Guess - extract content using HTML::ExtractContent

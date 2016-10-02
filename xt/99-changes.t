@@ -12,7 +12,7 @@ release date is mentioned as well
 
 =cut
 
-my $module = 'Filter::signatures';
+my $module = 'HTML::ExtractContent::FTR';
 
 (my $file = $module) =~ s!::!/!g;
 require "$file.pm";
