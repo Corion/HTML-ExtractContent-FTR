@@ -1,8 +1,15 @@
 package HTML::ExtractContent::Guess;
 use strict;
+use Moo;
+
+use if $] < 5.020, 'Filter::signatures';
+use feature 'signatures';
+no warnings 'experimental::signatures';
+
 use HTML::ExtractContent;
 use HTML::HeadParser;
 use HTML::ExtractContent::Info;
+use HTML::ExtractContent::Guess::Date;
 
 use vars '$VERSION';
 $VERSION = '0.01';
@@ -27,29 +34,56 @@ HTML::ExtractContent::Guess - extract content using HTML::ExtractContent
 
 =cut
 
-sub new {
-    my( $class, %options ) = @_;
-    $options{ extractor } ||= HTML::ExtractContent->new();
-    $options{ parser } ||= HTML::HeadParser->new();
-}
+has 'extractor' => (
+    is => 'ro',
+    default => sub { HTML::ExtractContent->new() },
+);
 
-sub extractor { $_[0]->{extractor} }
-sub parser { $_[0]->{parser} }
+has 'parser' => (
+    is => 'ro',
+    default => sub { HTML::HeadParser->new() },
+);
 
-sub extract {
-    my( $self, $html, %options ) = @_;
-    
+has 'date_extractor' => (
+    is => 'ro',
+    default => sub { HTML::ExtractContent::Guess::Date->new() },
+);
+
+sub extract( $self, $html, %options ) {
     # Also save the title tag:
     $self->parser->parse($html);
     my $title = $self->parser->header('Title') || $options{ url };
     my $html = $self->extractor->extract($html)->as_text;
+    my $date = $self->date_extractor->extract($html);
     
     if( $html ) {
         return HTML::ExtractContent::Info->new(
             title => $title,
             html => $html,
+            date => $date,
         );
     }
 }
 
 1;
+
+=head1 FUTURE IMPROVEMENTS
+
+This should be able to guess the publication date from the URL
+or from META parts of the content or any date appearing in the content.
+
+=head2 Date extraction
+
+L<https://wiki.whatwg.org/wiki/MetaExtensions>
+
+C<< <meta name="dcterms.created" content="..."> >>
+
+C<< <meta name="dc.created" content="..."> >>
+
+C<< <meta name="created" content="..."> >>
+
+If all these fail, guess by looking at the URL
+
+Then, guess by looking at the page content.
+
+=cut

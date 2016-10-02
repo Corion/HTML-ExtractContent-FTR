@@ -108,9 +108,3 @@ sub date_tree { $_[0]->{date} }
 
 1;
 
-=head1 FUTURE IMPROVEMENTS
-
-This should be able to guess the publication date from the URL
-or from META parts of the content or any date appearing in the content.
-
-=cut
