@@ -1,18 +1,18 @@
 package HTML::ExtractContent::FTR;
 use strict;
 use 5.016; # for fc
+use if $] < 5.020, 'Filter::signatures';
+use feature 'signatures';
+no warnings 'experimental::signatures';
 use URI;
 use Carp qw(croak);
-use HTML::HTML5::Parser;
-# use HTML::Gumbo (which doesn't complete its test suite on Win32/Strawberry)
-# or maybe Mojo::DOM
-use HTML::TreeBuilder::LibXML::Node;
+use Mojo::DOM;
+use Tree::XPathEngine::Mojo;
 use HTML::Selector::XPath 'selector_to_xpath';
-use Data::Dumper;
 use HTML::ExtractContent::Pluggable;
 use File::Basename;
 
-use vars qw(%rules @rules $VERSION);
+use vars qw(%rules $VERSION);
 $VERSION = '0.01';
 
 =head1 NAME
@@ -79,8 +79,9 @@ sub new {
                              } @rules;
             %rules = map { $_->{host} => $_ } @parsed;
         } elsif( ! keys %rules) {
-            my @parsed = $class->parse(\@rules);
-            %rules = map { $_->{host} => $_ } @parsed;
+            croak "No rules given";
+            #my @parsed = $class->parse(\@rules);
+            #%rules = map { $_->{host} => $_ } @parsed;
         }
         $options{ rules } ||= \%rules;
         
@@ -105,8 +106,16 @@ sub new {
 sub find_xpath {
     my( $self, $html, %options ) = @_;
     
-    my $substring = $options{substring};
-    $substring =~ quotemeta $substring;
+    my $query;
+    if( my $substring = $options{substring} ) {
+        $substring =~ s!(["'\\])!\\$1!;
+        $query = "//*[contains(text(),'$substring')]";
+    };
+    
+    if( my $attr = $options{ attr }) {
+        $attr =~ s!(["'\\])!\\$1!;
+        $query = "//*[\@*[contains(.,'$attr')]]";
+    };
     
     # brute-force traverse our tree and output the node path(s)
     # where we find the text. Consider simplifying the path
@@ -114,39 +123,33 @@ sub find_xpath {
     # or @id.
     my $tree = $self->parse_html_string($html);
     my @res;
-    for my $node ($self->findnodes($tree, "//*[contains(text(),'$substring')]")) {
+    for my $node ($self->findnodes($tree, $query)) {
         push @res, $node;
     };
     
     @res
 }
 
-sub findnodes {
-    my( $self, $tree, $xpath ) = @_;
-    
-    # Convert query to a query with html: namespace prefix
-    my $ns_prefix = 'html';
-    $xpath =~ s!(/\s*(?:[-a-z]*::))(\w+)!$1$ns_prefix:$2!g;
-    #warn ">>$xpath";
-    
-    # And also (re)implement ->findnodes, because we want to
-    # pass in an XPath Query Context for the HTML namespace :-(
-    # The world could be so much nicer.
-    # See also https://rt.cpan.org/Public/Bug/Display.html?id=88041
-    # which discusses that what we're doing here is the currently
-    # acceptable workaround :-(
-    
-    my $xpc = XML::LibXML::XPathContext->new($tree->{node});
-    $xpc->registerNs($ns_prefix, 'http://www.w3.org/1999/xhtml');
-    
-    # Rebless them into HTML::TreeBuilder::LibXML::Node's
-    my $n = $xpc->findnodes($xpath);
+sub findnodes( $self, $tree, $xpath ) {
+    croak "No xpath expression" unless defined $xpath;
+    my $ctx = Tree::XPathEngine::Mojo->new($tree);
+    my $e = Tree::XPathEngine->new();
+
+    # Unwrap from Tree::XPathEngine::Mojo back to the real nodes
     my @nodes = map {
-        #warn $_;
-        HTML::TreeBuilder::LibXML::Node->new( $_ )
-    } $n->get_nodelist();
+        $_->{node}
+    } $e->findnodes($xpath, $ctx);
+
     wantarray ? @nodes : \@nodes;
 };
+
+=head2 C<< $extractor->extract $html, %options >>
+
+  my $info = $extractor->extract($html, url => 'http://example.com/foo' );
+  print $info->title, "\n";
+  print $info->as_text, "\n";
+
+=cut
 
 sub extract {
     my( $self, $html, %options ) = @_;
@@ -167,22 +170,9 @@ sub extract {
 }
 
 sub parse_html_string {
-    my( $self, $html, $options ) = @_;
-    $options ||= { encoding => 1 };
+    my( $self, $html) = @_;
     
-    my $p = HTML::HTML5::Parser->new;
-    # We should somehow respect the encoding here...
-    use Encode 'encode';
-    $html = encode('UTF-8', $html); 
-    open my $fh, '<', \$html
-        or die "Couldn't read in-memory handle: $!";
-    my $tree = $p->parse_fh($fh, $options);
-    # This puts all nodes into the HTML namespace
-    #   http://www.w3.org/1999/xhtml
-    # but we want non-namespaced elements :-((
-    # Maybe rebuilding the tree is an approach here?!
-    
-    return HTML::TreeBuilder::LibXML::Node->new( $tree->documentElement );
+    Mojo::DOM->new( $html );
 }
 
 sub apply_rules {
@@ -199,17 +189,17 @@ REPARSE:
     for my $phase (@{ $rule->{commands} }) {
         for my $step (@{ $phase }) {
             #$tree->dump;
-            warn "$step->{command} $step->{target}\n";
+            #warn "$step->{command} $step->{target}\n";
             $tree = $step->{compiled}->($rule, $tree, $info);
             
             if( $info->{fetch} ) {
-                warn "Refetching as $info->{url}";
+                #warn "Refetching as $info->{url}";
                 # No, this should be(come) a state machine
                 # Return state, wanted URL and explanatory message
                 # to the user here
                 if( my $fetcher = $self->{do_fetch}) {
                     $html = $fetcher->( $info->{url} );
-                    warn "Restarting with [[$html]]";
+                    #warn "Restarting with [[$html]]";
                     goto REPARSE;
                 } else {
                     return $info
@@ -362,11 +352,9 @@ sub compile_single_page_link {
         my($r, $tree, $info) = @_;
         
         warn "Scanning for single page link in '$rule->{target}'";
-  #my $xpc = XML::LibXML::XPathContext->new;
-  #$xpc->registerNs('html', 'http://www.w3.org/1999/xhtml');
         my @res = $self->findnodes($tree, $rule->{target});
         
-        warn Dumper \@res;
+        #warn Dumper \@res;
         if( @res ) {
             warn Dumper $res[0];
             my $target = $res[0]->{href};
@@ -425,6 +413,7 @@ sub unique_nodes {
     # and do a direct string compare. Prestochangodone. (at least for
     # those implementations where the XPath expression is canonical)
     my( $self, $new_node, @nodes ) = @_;
+    return @nodes,$new_node;
     my @new_ancestors = $new_node->ancestors;
     grep {
         my( $node ) = $_;
@@ -463,6 +452,7 @@ sub _compile_selector_fetch {
                 # Attributes need special handling
                 $node = $node->getValue
                     if $node->can('getValue');
+                # XXX This should be adapted to Mojo::DOM
 
                 if( ref $node) {
                     # Check whether this node is already contained in $storage
@@ -473,7 +463,6 @@ sub _compile_selector_fetch {
                     push @$storage, $node;
                 };
                 
-                #$node->detach;
             };
         } else {
             warn "No node found for '$rule->{target}'";
@@ -593,152 +582,6 @@ sub compile_move_into {
         };
         return $tree
     }
-}
-
-
-@rules = (
-
-# (re)fetch them from
-# https://github.com/fivefilters/ftr-site-config
-
-<<'RULE',
-host: lwn.net
-
-# HTML5 anyone? The 1980s called, they want their HTML4 back.
-# LWN uses so little markup that you really have to be creative.
-
-tidy: yes
-prune: no
-
-single_page_link: //div[@class='ArticleText']//a[contains(text(), 'Full Story')]/@href
-single_page_link: concat(//div[@class='ArticleText']//a[contains(text(), 'Read more')]/@href, 'bigpage')
-
-title: //h1
-
-# After tiding the document, <b> becomes <strong>.
-author: //div[@class='FeatureByline']/strong
-date: //div[@class='FeatureByline']/text()[preceding-sibling::br]
-strip: //div[@class='FeatureByline']
-author: substring-after(//div[@class='GAByline']/p[2], 'by ')
-date: //div[@class='GAByline']/p[1]
-strip: //div[@class='GAByline']
-
-# tidy will take care of fixing the tag mess that we make here.
-replace_string(<p class="Cat1HL">): <h1>
-replace_string(<h2 class="SummaryHL">): <h3>
-replace_string(<p class="Cat2HL">): <h2>
-
-# Make extracting the content before "Log in to post comments" easier.
-# And by "easier" I mean possible in all cases without going through
-# a lot of XPath pain.
-replace_string(<hr width="60%" align="left">): <div class="ftrss-strip">
-replace_string(to post comments)): </div>
-strip: //div[@class='ftrss-strip']
-body: //div[@class='ArticleText']
-
-test_url: http://lwn.net/Articles/668318/
-test_url: http://lwn.net/Articles/668695/
-test_url: http://lwn.net/Articles/669114/
-test_url: http://lwn.net/Articles/670209/
-test_url: http://lwn.net/Articles/670209/rss
-test_url: http://lwn.net/Articles/668318/rss
-test_url: http://lwn.net/Articles/670062/
-RULE
-
-<<'RULE',
-host: www.kickstarter.com
-
-title: //h1[@id='name']
-body: //*[@id='leftcol']
-
-strip_id_or_class: 'share-box'
-strip_id_or_class: 'project-faqs'
-strip_id_or_class: 'report-issue-wrap'
-test_url: http://www.kickstarter.com/projects/hop/elevation-dock-the-best-dock-for-iphone
-RULE
-
-<<'RULE',
-# Author: zinnober
-# Template should work well with either desktop or mobile version (m.heise.de)
-host: heise.de
-
-prune: no
-
-title: //article/h1 | //h1
-date: //p[@class='news_datum']
-author: //h4[@class='author']
-
-body: //article | //div[@class='meldung_wrapper']
-
-# General cleanup
-strip: //time
-strip: //header
-strip: //h4[@class='author']
-strip: //div[@class='gallery compact']/h3
-strip: //div[@class='gallery compact']/figcaption
-strip: //p[@class='news_datum']
-strip: //p[@class='artikel_datum']
-strip: //p[@class='news_navi']
-strip: //p[@class='printversion']
-strip: //a[contains(@href, 'mailto')]
-strip: //div[@class='gallery compact']/h2
-strip: //p[@class='themen_foren']
-strip: //style
-strip: //span[@class='source']
-#strip: //div[@class='gallery compact']/figcaption
-strip_id_or_class: comments
-strip_id_or_class: ISI_IGNORE
-strip_id_or_class: clear
-
-strip_id_or_class: linkurl_grossbild
-strip_id_or_class: image-num
-strip_id_or_class: heisebox_right
-strip_id_or_class: dossier
-strip_id_or_class: latest_posting_snippet
-
-# Strip Ads
-strip_id_or_class: ad_
-
-# Some optimizations
-replace_string(<h5>): <h2>
-replace_string(</h5>): </h2>
-replace_string(<span class="bild_rechts" style="width:): <p "
-replace_string(<div class="heisebox">): <blockquote>
-
-
-next_page_link: //a[@class='next']
-next_page_link: //a[@title='vor']
-
-test_url: http://www.heise.de/open/artikel/Die-Neuerungen-von-Linux-3-15-2196231.html
-test_url: http://m.heise.de/open/artikel/Die-Neuerungen-von-Linux-3-15-2196231.html
-test_url: http://www.heise.de/newsticker/meldung/Ueberwachungstechnik-Die-globale-Handy-Standortueberwachung-2301494.html
-
-RULE
-
-);
-
-package HTML::TreeBuilder::LibXML::Node;
-use vars '$AUTOLOAD';
-sub AUTOLOAD {
-    $AUTOLOAD =~ m/::(\w+)$/
-        or die "Invalid method '$AUTOLOAD' called";
-    my $method = $1;
-    #use Data::Dumper;
-    #warn Dumper $_[0];
-    my $cb = $_[0]->{node}->can( $method )
-        or die "Method '$method' not found in $_[0]";
-    my $delegate = sub {
-        my $self = shift @_;
-        unshift @_, $self->{node};
-        goto &$cb;
-    };
-    no strict 'refs';
-    *{"HTML::TreeBuilder::LibXML::Node\::$method"} = $delegate;
-    goto &$delegate;
-}
-
-sub dump {
-    print $_[0]->toString;
 }
 
 =head1 SEE ALSO 

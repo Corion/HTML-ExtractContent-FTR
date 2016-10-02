@@ -18,3 +18,4 @@ Makefile$
 ^.releaserc
 ^HTML-ExtractContent-FTR-.*/
 ^HTML-ExtractContent-FTR-.*.tar.gz$
+.*.html$

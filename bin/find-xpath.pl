@@ -19,6 +19,9 @@ my $extractor = HTML::ExtractContent::FTR->new(
 my @nodes = $extractor->find_xpath( $html,
     url => $url,
     substring => $substring );
+push @nodes, $extractor->find_xpath( $html,
+    url => $url,
+    attr => $substring );
 
 sub myNodePath {
     my $node = shift;
@@ -27,6 +30,12 @@ sub myNodePath {
         my $el = $node->nodeName;
         if( my $class = $node->attr('class') ) {
             $el .= "[contains(\@class, '$class')]";
+        } elsif( $el eq 'meta' and my $name = $node->attr('name')) {
+            $el .= qq([\@name="$name"]);
+        } elsif( $el eq 'meta' and my $prop = $node->attr('property')) {
+            $el .= qq([\@property="$prop"]);
+        } elsif( $el eq 'href' and my $rel = $node->attr('rel')) {
+            $el .= qq([\@rel="$rel"]);
         };
         push @res, $el;
         $node = $node->parent;
@@ -35,6 +44,10 @@ sub myNodePath {
 }
 
 for my $node (@nodes) {
+    next if $node->nodeName eq 'script';
     print myNodePath($node), "\n";
     print $node->textContent;
+    if ($node->nodeName eq 'meta' ) {
+        print $node->toString;
+    };
 }

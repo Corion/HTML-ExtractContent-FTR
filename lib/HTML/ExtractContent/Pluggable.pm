@@ -77,6 +77,7 @@ sub extract {
 
 package HTML::ExtractContent::Info;
 use strict;
+use Mojo::DOM;
 
 sub new {
     my( $class, $info ) = @_;
@@ -86,10 +87,9 @@ sub new {
 sub tree_as_text {
     my($self, $attr) = @_;
     if( my $tree = $self->{$attr}) {
-        my $res = HTML::Element->new('div');
-        $res->push_content( @$tree );
-        $res->as_text
-        #$tree->as_text
+        my $res = Mojo::DOM->new();
+        $res->append_content( $_ ) for @$tree;
+        $res->content
     } else {
         undef
     }

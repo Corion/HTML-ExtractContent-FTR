@@ -35,10 +35,7 @@ WriteMakefile1(
     PL_FILES            => {},
     PREREQ_PM => {
         'Exporter' => 5, # for use Exporter 'import'
-        
-        #'HTML::TreeBuilder::XPath' => 0,  # This is the API we want
-        'HTML::TreeBuilder::LibXML' => 0, # This provides the API for LibXML
-        'HTML::HTML5::Parser' => 0, # This is what we actually use
+        'Mojo::DOM' => 0, # the only sane parser I found that supports HTML5 tags :-(
 
         },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
