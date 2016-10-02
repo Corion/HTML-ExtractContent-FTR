@@ -115,7 +115,7 @@ sub findnodes {
     
     # Convert query to a query with html: namespace prefix
     my $ns_prefix = 'html';
-    $xpath =~ s!(/\s*)(\w+)!$1$ns_prefix:$2!g;
+    $xpath =~ s!(/\s*(?:[-a-z]*::))(\w+)!$1$ns_prefix:$2!g;
     #warn ">>$xpath";
     
     # And also (re)implement ->findnodes, because we want to
