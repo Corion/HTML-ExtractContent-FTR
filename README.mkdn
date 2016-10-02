@@ -1,6 +1,6 @@
 # NAME
 
-HTML::ExtractContent::FTR - extract content using Full-Test-RSS rules
+HTML::ExtractContent::FTR - extract content using Full-Text-RSS rules
 
 # SYNOPSIS
 
@@ -15,6 +15,24 @@ HTML::ExtractContent::FTR - extract content using Full-Test-RSS rules
     print $info->title, "\n";
     print $info->as_text, "\n";
 
+## `$extractor->can_extract %options`
+
+    if( $extractor->can_extract(url => 'http://example.com/foo' )) {
+        ...
+    };
+
+Returns whether the extractor has a set of rules
+for extracting content. This is convenient as a sanity check before
+you make a long network request.
+
+## `$extractor->extract $html, %options`
+
+    my $info = $extractor->extract($html, url => 'http://example.com/foo' );
+    if( $info ) {
+        print $info->title, "\n";
+        print $info->as_text, "\n";
+    };
+
 ## `->_compile_selector_fetch`
 
 The internal generator for compiling a rule that fetches an
@@ -25,7 +43,12 @@ if two nodes get selected and one is a descendant of the other.
 
 ## `->compile_if_page_contains`
 
-A no-op currently
+A no-op currently, until I figure out how to
+structure conditional statements
+
+## `->compile_strip`
+
+Strip all elements from the page that match a selector
 
 # SEE ALSO 
 

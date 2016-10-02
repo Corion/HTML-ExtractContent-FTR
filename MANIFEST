@@ -15,6 +15,7 @@ README.mkdn
 t/00-load.t
 t/01-find-xpath.t
 t/01-mojo-xpath.t
+t/02-html-extractcontent-api.t
 xt/99-changes.t
 xt/99-compile.t
 xt/99-manifest.t

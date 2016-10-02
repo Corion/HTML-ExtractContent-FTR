@@ -143,16 +143,20 @@ sub findnodes( $self, $tree, $xpath ) {
     wantarray ? @nodes : \@nodes;
 };
 
-=head2 C<< $extractor->extract $html, %options >>
+=head2 C<< $extractor->can_extract %options >>
 
-  my $info = $extractor->extract($html, url => 'http://example.com/foo' );
-  print $info->title, "\n";
-  print $info->as_text, "\n";
+  if( $extractor->can_extract(url => 'http://example.com/foo' )) {
+      ...
+  };
+
+Returns whether the extractor has a set of rules
+for extracting content. This is convenient as a sanity check before
+you make a long network request.
 
 =cut
 
-sub extract {
-    my( $self, $html, %options ) = @_;
+sub can_extract( $self, %options ) {
+    $options{ messages } ||= $self->{messages} || [];
     my $url = $options{ url };
     if( ! ref $url ) {
         $url = URI->new( $url );
@@ -162,10 +166,32 @@ sub extract {
         my $partial = substr($host,length($host)-length($_), length $_);
         fc( $_ ) eq fc( $partial )
     } sort keys %{ $self->{rules} };
-    if( my $rule = $self->{rules}->{$match} ) {
+    if( ! $match) {
+        push @{ $options{ messages }}, "No host match found for '$host' in rules.";
+    };
+    $match
+}
+
+=head2 C<< $extractor->extract $html, %options >>
+
+  my $info = $extractor->extract($html, url => 'http://example.com/foo' );
+  if( $info ) {
+      print $info->title, "\n";
+      print $info->as_text, "\n";
+  };
+
+=cut
+
+sub extract {
+    my( $self, $html, %options ) = @_;
+    $options{ messages } ||= $self->{messages} || [];
+
+    my $match = $self->can_extract( %options );    
+    my $url = $options{ url };
+    if( $match and my $rule = $self->{rules}->{$match} ) {
         return $self->apply_rules( $rule, $html, $url, %options );
     } else {
-        warn "No host match found for '$host' in rules.";
+        return
     };
 }
 
@@ -181,14 +207,12 @@ sub apply_rules {
 REPARSE:
     # This needs to happen only after the ->fetch stage...
     my $tree = $self->parse_html_string( $html, { url => $url } );
-    #$tree->dump;
     
     my $info = {};
     # How do we fetch-and-restart the program with
     # single_page_link?
     for my $phase (@{ $rule->{commands} }) {
         for my $step (@{ $phase }) {
-            #$tree->dump;
             #warn "$step->{command} $step->{target}\n";
             $tree = $step->{compiled}->($rule, $tree, $info);
             

@@ -13,10 +13,22 @@ my( $url ) = @ARGV;
 my $html = get $url;
 $rules_folder ||= './ftr-site-config';
 
+my @messages;
 my $extractor = HTML::ExtractContent::FTR->new(
     rules_folder => $rules_folder,
+    messages => \@messages,
 );
+
+if( !$extractor->can_extract( url => $url )) {
+    die "Don't know how to extract pages from '$url'\n";
+};
+
 my $info = $extractor->extract( $html, url => $url );
+if( ! $info ) {
+    warn "$_\n"
+        for @messages;
+    exit 1
+};
 
 sub get_html {
     my( $el ) = @_;
