@@ -16,6 +16,10 @@ regen_README('lib/HTML/ExtractContent/FTR.pm');
 
 my @tests = map { glob $_ } 't/*.t', 't/*/*.t';
 
+my @signatures = eval 'use feature "signatures"; 1'
+                 ? ()
+                 : ('Filter::signatures' => 0.05);
+
 WriteMakefile1(
     MIN_PERL_VERSION => '5.010', # This is just a wild guess
     NAME                => 'HTML::ExtractContent::FTR',
@@ -34,8 +38,17 @@ WriteMakefile1(
 
     PL_FILES            => {},
     PREREQ_PM => {
+        @signatures,
         'Exporter' => 5, # for use Exporter 'import'
+        'Carp' => 0,
+        'File::Basename' => 0,
+        
+        'Moo' => 0,
+        
         'Mojo::DOM' => 0, # the only sane parser I found that supports HTML5 tags :-(
+        'Tree::XPathEngine' => 0, # For Tree::XPathEngine::Mojo
+        'HTML::ExtractMain' => 0, # for HTML::ExtractContent::ExtractMain
+        'HTML::HeadParser' => 0, # for HTML::ExtractContent::Guess - this should move to Mojo::DOM
 
         },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
