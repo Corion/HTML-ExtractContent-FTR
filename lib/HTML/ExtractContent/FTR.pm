@@ -65,7 +65,16 @@ sub new {
             opendir my $rules,  $options{ rules_folder }
                 or croak "Couldn't read '$options{ rules_folder }': $!";
             my @rules = grep { /\.txt$/i } readdir $rules;
-            my @parsed = map { $class->parse_file("$options{ rules_folder }/$_") } @rules;
+            my @parsed = map {
+                               my $f = "$options{ rules_folder }/$_";
+                               my $r = eval {
+                                   $class->parse_file($f);
+                               };
+                               if( $@ ) {
+                                   warn "$@, ignoring $f";
+                               };
+                               $r ? $r : ()
+                             } @rules;
             %rules = map { $_->{host} => $_ } @parsed;
         } elsif( ! keys %rules) {
             my @parsed = $class->parse(\@rules);
