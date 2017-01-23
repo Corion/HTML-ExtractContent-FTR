@@ -66,7 +66,7 @@ sub new {
         if( exists $options{ rules_folder } ) {
             opendir my $rules,  $options{ rules_folder }
                 or croak "Couldn't read '$options{ rules_folder }': $!";
-            my @rules = grep { /\.txt$/i } readdir $rules;
+            my @rules = grep { /\.txt$/i && ! $_ eq 'LICENSE.txt' } readdir $rules;
             my @parsed = map {
                                my $f = "$options{ rules_folder }/$_";
                                my $r = eval {
