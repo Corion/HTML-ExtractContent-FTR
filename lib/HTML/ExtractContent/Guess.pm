@@ -86,4 +86,8 @@ If all these fail, guess by looking at the URL
 
 Then, guess by looking at the page content.
 
+=head1 SEE ALSO
+
+L<HTML::ExtractMeta>
+
 =cut
