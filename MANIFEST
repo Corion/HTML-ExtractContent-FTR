@@ -5,6 +5,7 @@ Changes
 lib/HTML/ExtractContent/ExtractMain.pm
 lib/HTML/ExtractContent/FTR.pm
 lib/HTML/ExtractContent/Guess.pm
+lib/HTML/ExtractContent/Guess/Date.pm
 lib/HTML/ExtractContent/Pluggable.pm
 lib/Tree/XPathEngine/Mojo.pm
 Makefile.PL
