@@ -6,6 +6,7 @@ lib/HTML/ExtractContent/ExtractMain.pm
 lib/HTML/ExtractContent/FTR.pm
 lib/HTML/ExtractContent/Guess.pm
 lib/HTML/ExtractContent/Guess/Date.pm
+lib/HTML/ExtractContent/Info.pm
 lib/HTML/ExtractContent/Pluggable.pm
 lib/Tree/XPathEngine/Mojo.pm
 Makefile.PL
@@ -17,6 +18,7 @@ t/00-load.t
 t/01-find-xpath.t
 t/01-mojo-xpath.t
 t/02-html-extractcontent-api.t
+t/03-html-guess-date.t
 xt/99-changes.t
 xt/99-compile.t
 xt/99-manifest.t

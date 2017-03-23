@@ -1,11 +1,11 @@
 package HTML::ExtractContent::Guess::Date;
 use strict;
+use Moo 2;
 
-use if $] < 5.020, 'Filter::signatures';
-use feature 'signatures';
+use Filter::signatures;
 no warnings 'experimental::signatures';
+use feature 'signatures';
 
-use Moo;
 use Mojo::DOM;
 use HTML::ExtractContent::Info;
 use Tree::XPathEngine::Mojo;
@@ -26,7 +26,6 @@ HTML::ExtractContent::Guess::Date - heuristic for extracting the creation/public
   my $url = 'http://www.example.com/';
   my $res = $agent->get($url);
 
-  my $tree = Mojo::DOM->new( $res );
   my $extractor = HTML::ExtractContent::Guess::Date->new;
   my $info = $extractor->extract($res->decoded_content, url => $url);
   print $info->date, "\n";
@@ -46,39 +45,58 @@ use vars '@date_expressions';
 );
 
 has 'parser' => (
-    is => 'ro',
+    is => 'lazy',
     default => sub { Mojo::DOM->new() },
 );
 
 has 'expressions' => (
-    is => 'ro',
+    is => 'lazy',
     default => sub {[ @date_expressions ]},
 );
 
 has 'engine' => (
-    is => 'ro',
+    is => 'lazy',
     default => sub { Tree::XPathEngine::Mojo->new() },
 );
 
 sub extract( $self, $tree, %options ) {
+    $tree ||= '';
     if( ! ref $tree) {
         $tree = Mojo::DOM->new($tree);
     };
     
-    for my $rule (@{ $self->expressions }) {
-        my $expression = $rule->{query};
-        my @nodes = map { $_->{node} }
-            $e->findnodes($expression,$tree);
-        if( @nodes ) {
-            my $node = $nodes[0];
-            my $val = $rule->{attribute} ? $node->{ $rule->{attribute} }
-                    : $node->content;
-            # Here we should upgrade the date to yyyy-mm-dd or ISO
-            return HTML::ExtractContent::Info->new(
-                date => $val,
-            );
+    my $res;
+    
+    # First we look at the URL and whether it gives us a hint
+    if( my $url = $options{ url } ) {
+        $url =~ m!\b((?:19|20)\d\d)(\D?)((?:0\d|1[012]))(\2)([012]\d|3[01])\b!
+            # http://www.example.com/2017/01/01/foo-is-bad.html
+            and $res = HTML::ExtractContent::Info->new({
+                date => Mojo::DOM->new->parse("<date>$1-$3-$5</date>"),
+            });
+    };
+    
+    # Then we look at the content, first matching rule is good
+    if(! $res) {
+        my $ctx = Tree::XPathEngine::Mojo->new($tree);
+        my $e = Tree::XPathEngine->new();
+        for my $rule (@{ $self->expressions }) {
+            my $expression = $rule->{query};
+            my @nodes = map { $_->{node} }
+                $e->findnodes($expression,$ctx);
+            if( @nodes ) {
+                my $node = $nodes[0];
+                my $val = $rule->{attribute} ? $node->{ $rule->{attribute} }
+                        : $node->content;
+                # Here we should upgrade the date to yyyy-mm-dd or ISO
+                $res =  HTML::ExtractContent::Info->new({
+                    date =>$val,
+                });
+                last
+            };
         };
     };
+    $res
 }
 
 1;

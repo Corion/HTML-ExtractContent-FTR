@@ -45,8 +45,11 @@ has 'parser' => (
 );
 
 has 'date_extractor' => (
-    is => 'ro',
-    default => sub { HTML::ExtractContent::Guess::Date->new() },
+    is => 'lazy',
+    default => sub {
+        require HTML::ExtractContent::Guess::Date;
+        HTML::ExtractContent::Guess::Date->new();
+    },
 );
 
 sub extract( $self, $html, %options ) {
